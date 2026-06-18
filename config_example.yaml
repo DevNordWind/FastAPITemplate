@@ -1,0 +1,35 @@
+db:
+  db: TemplateDB
+
+  host: postgres
+  port: 5432
+  username: postgres
+  password: 1234
+
+  driver: psycopg
+
+  sql_alchemy:
+    echo: false
+    hide_parameters: true
+    pool_pre_ping: true
+
+redis:
+  db: 0
+
+  host: redis
+  port: 6379
+  username: null
+  password: null
+
+
+auth_policy:
+  jwt_secret: YOUR_SECRET
+  jwt_algorithm: HS256
+  expires_in: 7d # d, h, m, etc
+
+environment:
+  prod: true
+  log_level: 20
+
+  cors_origins:
+    - "http://localhost:5173"

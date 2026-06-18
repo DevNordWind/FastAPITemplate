@@ -1,0 +1,119 @@
+name: fastapi-template
+
+x-app-base: &app-base
+  image: fastapi-template:1.0
+  build:
+    context: ..
+    dockerfile: deployment/Dockerfile
+  restart: unless-stopped
+  init: true
+  volumes:
+    - ../config.yaml:/app/config.yaml:ro
+  networks:
+    - internal
+  security_opt:
+    - no-new-privileges:true
+
+networks:
+  internal:
+    internal: true
+  external:
+    internal: false
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  rest:
+    !!merge <<: *app-base
+    command: >
+      uvicorn src.app.main.rest:app --factory --host 0.0.0.0 --port 8000 --proxy-headers --loop uvloop --workers 2 --forwarded-allow-ips="172.16.0.0/12"
+    container_name: rest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    ports:
+      - 8000:8000
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - internal
+      - external
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "5"
+
+  postgres:
+    image: postgres:18.4-alpine3.23
+    container_name: postgres_db
+    restart: unless-stopped
+    env_file:
+      - ./postgres/.env
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - postgres_data:/var/lib/postgresql/18/docker
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: >
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 3G
+
+  migrations:
+    !!merge <<: *app-base
+    command: alembic upgrade head
+    container_name: migrations
+    restart: "no"
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:8.8-alpine3.23
+    container_name: redis_cache
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
