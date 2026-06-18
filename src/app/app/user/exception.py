@@ -1,0 +1,13 @@
+from app.app.common.exception import AppError
+
+
+class UserAppError(AppError): ...
+
+
+class UserAuthenticationError(UserAppError): ...
+
+
+class UserAlreadyAuthenticatedError(UserAppError): ...
+
+
+class UserNotAuthenticatedError(UserAppError): ...
